@@ -2,81 +2,90 @@
 
 import argparse
 import sys
-
+import locale
 
 def process_stream(input_stream):
+    """Reads a binary stream line-by-line and returns all calculated counts."""
     byte_count = 0
     line_count = 0
     word_count = 0
     char_count = 0
+
+    # Get the system's encoding once, before the loop.
+    encoding = locale.getpreferredencoding(False)
+
     for line in input_stream:
-        byte_count += len(line)
-        char_count += len(line.decode())
-        word_count += len(line.split())
         line_count += 1
-
-
+        byte_count += len(line)
+        
+        # Decode ONCE per line, handling potential errors.
+        decoded_line = line.decode(encoding, errors='replace')
+        
+        # Perform text operations on the DECODED string.
+        word_count += len(decoded_line.split())
+        char_count += len(decoded_line)
+    
     return {
-        "byte_count": byte_count,
-        "line_count": line_count,
-        "word_count": word_count,
-        "char_count": char_count, 
+        "bytes": byte_count,
+        "lines": line_count,
+        "words": word_count,
+        "chars": char_count,
     }
 
-
 def main():
-    parser = argparse.ArgumentParser(description="WC in python!")
+    parser = argparse.ArgumentParser(
+        description="A robust WC implementation in Python!",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
 
-    parser.add_argument("filename", nargs="?", help="filename to check")
-    parser.add_argument("-c", "--count", action="store_true", help="byte count in file")
-    parser.add_argument(
-        "-l", "--length", action="store_true", help="line count in file"
-    )
-    parser.add_argument("-w", "--word", action="store_true", help="word count in file")
-    parser.add_argument(
-        "-m", "--match_character", action="store_true", help="character count in file"
-    )
+    parser.add_argument("filename", nargs="?", default=None, help="File to process (reads from stdin if not provided).")
+    parser.add_argument("-c", "--count-bytes", dest="bytes", action="store_true", help="Output the byte count.")
+    parser.add_argument("-l", "--lines", dest="lines", action="store_true", help="Output the line count.")
+    parser.add_argument("-w", "--words", dest="words", action="store_true", help="Output the word count.")
+    parser.add_argument("-m", "--chars", dest="chars", action="store_true", help="Output the character count.")
 
     args = parser.parse_args()
-
-    counts = {}
-
-    if args.filename:
-        try:
-            with open(args.filename, "rb") as f:
+    
+    try:
+        if args.filename:
+            with open(args.filename, 'rb') as f:
                 counts = process_stream(f)
-
-        except FileNotFoundError:
-            print(f"Error: File not found '{args.filename}'")
-    else:
-        counts = process_stream(sys.stdin.buffer)
+        else:
+            counts = process_stream(sys.stdin.buffer)
+    except FileNotFoundError:
+        print(f"Error: File not found '{args.filename}'", file=sys.stderr)
+        return
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}", file=sys.stderr)
+        return
 
     output_parts = []
-
-    # Check if we are in the default case (no flags provided).
-    is_default_case = not any(
-        [args.count, args.length, args.word, args.match_character]
-    )
+    is_default_case = not any([args.bytes, args.lines, args.words, args.chars])
 
     if is_default_case:
-        # The standard `wc` default is lines, words, bytes.
-        output_parts.append(counts["line_count"])
-        output_parts.append(counts["word_count"])
-        output_parts.append(counts["byte_count"])
+        output_parts.extend([
+            str(counts["lines"]),
+            str(counts["words"]),
+            str(counts["bytes"])
+        ])
     else:
-        if args.length:
-            output_parts.append(counts["line_count"])
-        if args.word:
-            output_parts.append(counts["word_count"])
-        if args.match_character:
-            output_parts.append(counts["char_count"])
-        if args.count:
-            output_parts.append(counts["byte_count"])
+        if args.lines:
+            output_parts.append(str(counts["lines"]))
+        if args.words:
+            output_parts.append(str(counts["words"]))
+        if args.chars:
+            output_parts.append(str(counts["chars"]))
+        if args.bytes:
+            output_parts.append(str(counts["bytes"]))
+            
+    # Join the parts into a final string
+    output_string = "\t".join(output_parts)
 
-    for i in output_parts:
-        print(i, end="\t")
-    print(args.filename) if args.filename else print("")
-
+    # Print the final result cleanly
+    if args.filename:
+        print(f"{output_string}\t{args.filename}")
+    else:
+        print(output_string)
 
 if __name__ == "__main__":
     main()
